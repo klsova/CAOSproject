@@ -25,23 +25,23 @@ def parent_process(pipe_read_ends, shm_name):
     """Function executed by the parent process (init)."""
 
 #We create a list to store the random numbers from each child
-random_numbers = []
+    random_numbers = []
 
 #We read the random numberts from all child processes via the pipes
-for i in range(NUM_CHILDREN):
-    data = os.read(pipe_read_ends[i], 4)
-    rand_num = int.from_bytes(data, 'little')
-    print(f"Parent received from child {i+1}: {rand_num}")
-    random_numbers.append(rand_num)
+    for i in range(NUM_CHILDREN):
+        data = os.read(pipe_read_ends[i], 4)
+        rand_num = int.from_bytes(data, 'little')
+        print(f"Parent received from child {i+1}: {rand_num}")
+        random_numbers.append(rand_num)
 
 #Then we attach the shard memory created by the scheduler process
-shm = shared_memory.SharedMemory(name=shm_name)
+        shm = shared_memory.SharedMemory(name=shm_name)
 #And then copy the random number to the shared memory
-for i, num in enumerate(random_numbers):
-    shm.buf[i*4:i*4+4] = num.to_bytes(4, 'little')
+    for i, num in enumerate(random_numbers):
+        shm.buf[i*4:i*4+4] = num.to_bytes(4, 'little')
 
 #And then we close the shared memory
-shm.close()
+    shm.close()
 
 #Then we define the scheduler process
 def scheduler_process():
