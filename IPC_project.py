@@ -4,7 +4,6 @@ import multiprocessing.shared_memory as shared_memory
 import time
 
 #The number of child processes
-
 NUM_CHILDREN = 4
 
 #First we define the child process
