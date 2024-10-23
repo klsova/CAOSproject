@@ -42,15 +42,17 @@ def parent_process(pipe_read_ends, shm_pipe_read):
     for i, num in enumerate(random_numbers):
         shm.buf[i*4:i*4+4] = num.to_bytes(4, 'little')
 
-    # Detach from shared memory (shm.close only closes the handle, not the memory itself)
+    # Detach from shared memory
     shm.close()
+
+    return shm_name  # Return the shared memory name for unlinking later
 
 def scheduler_process(shm_pipe_write):
     """Function executed by the scheduler process."""
     # Create a shared memory segment that can hold 4 integers (4 bytes per int)
     shm = shared_memory.SharedMemory(create=True, size=NUM_CHILDREN * 4)
     print(f"Scheduler created shared memory: {shm.name}")
-    
+
     # Send the shared memory name to the parent process
     os.write(shm_pipe_write, shm.name.encode())
 
@@ -65,9 +67,10 @@ def scheduler_process(shm_pipe_write):
     random_numbers.sort()
     print(f"Scheduler sorted numbers: {random_numbers}")
     
-    # Clean up: Detach and delete the shared memory segment
+    # Clean up: Detach the shared memory segment, but don't unlink it yet
     shm.close()
-    shm.unlink()  # This removes the shared memory segment from the system
+    
+    return shm.name  # Return the name of the shared memory to be unlinked later
 
 if __name__ == "__main__":
     # Create pipes for parent-child communication
@@ -103,8 +106,12 @@ if __name__ == "__main__":
     os.close(shm_pipe[1])
 
     # Run the parent process function, passing the read ends of the pipes and the shared memory pipe
-    parent_process([pipes[i][0] for i in range(NUM_CHILDREN)], shm_pipe[0])
+    shm_name = parent_process([pipes[i][0] for i in range(NUM_CHILDREN)], shm_pipe[0])
 
     # Wait for the scheduler to finish
     os.waitpid(scheduler_pid, 0)
-    print("All processes complete.")
+    
+    # Now that all processes are done, we can safely unlink the shared memory
+    shm = shared_memory.SharedMemory(name=shm_name)
+    shm.unlink()  # This removes the shared memory segment from the system
+    print("All processes complete and shared memory unlinked.")
