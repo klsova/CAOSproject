@@ -1,6 +1,7 @@
 import os
 import random
 import multiprocessing.shared_memory as shared_memory
+from multiprocessing import resource_tracker  # Import resource tracker
 import time
 
 # Number of child processes
@@ -45,11 +46,19 @@ def parent_process(pipe_read_ends, shm_pipe_read):
     # Detach from shared memory (shm.close only closes the handle, not the memory itself)
     shm.close()
 
+    # Unregister shared memory from the resource tracker
+    resource_tracker.unregister(f"/dev/shm/{shm_name}", 'shared_memory')
+
+    return shm_name  # Return the shared memory name for unlinking later
+
 def scheduler_process(shm_pipe_write):
     """Function executed by the scheduler process."""
     # Create a shared memory segment that can hold 4 integers (4 bytes per int)
     shm = shared_memory.SharedMemory(create=True, size=NUM_CHILDREN * 4)
     print(f"Scheduler created shared memory: {shm.name}")
+
+    # Unregister the shared memory from resource_tracker to avoid double cleanup
+    resource_tracker.unregister(f"/dev/shm/{shm.name}", 'shared_memory')
 
     # Send the shared memory name to the parent process
     os.write(shm_pipe_write, shm.name.encode())
@@ -96,7 +105,7 @@ if __name__ == "__main__":
     if scheduler_pid == 0:  # Scheduler process
         # Close the read end of the shm_pipe in scheduler
         os.close(shm_pipe[0])
-        shm_name = scheduler_process(shm_pipe[1])
+        scheduler_process(shm_pipe[1])
         os._exit(0)  # Exit scheduler process after sorting
 
     # Parent process (init)
@@ -104,12 +113,13 @@ if __name__ == "__main__":
     os.close(shm_pipe[1])
 
     # Run the parent process function, passing the read ends of the pipes and the shared memory pipe
-    parent_process([pipes[i][0] for i in range(NUM_CHILDREN)], shm_pipe[0])
+    shm_name = parent_process([pipes[i][0] for i in range(NUM_CHILDREN)], shm_pipe[0])
 
     # Wait for the scheduler to finish
     os.waitpid(scheduler_pid, 0)
     
     # Now that all processes are done, we can safely unlink the shared memory
+    print(f"Unlinking shared memory: {shm_name}")
     shm = shared_memory.SharedMemory(name=shm_name)
     shm.unlink()  # This removes the shared memory segment from the system
     print("All processes complete and shared memory unlinked.")
