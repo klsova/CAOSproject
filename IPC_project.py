@@ -42,10 +42,8 @@ def parent_process(pipe_read_ends, shm_pipe_read):
     for i, num in enumerate(random_numbers):
         shm.buf[i*4:i*4+4] = num.to_bytes(4, 'little')
 
-    # Detach from shared memory
+    # Detach from shared memory (shm.close only closes the handle, not the memory itself)
     shm.close()
-
-    return shm_name  # Return the shared memory name for unlinking later
 
 def scheduler_process(shm_pipe_write):
     """Function executed by the scheduler process."""
@@ -98,7 +96,7 @@ if __name__ == "__main__":
     if scheduler_pid == 0:  # Scheduler process
         # Close the read end of the shm_pipe in scheduler
         os.close(shm_pipe[0])
-        scheduler_process(shm_pipe[1])
+        shm_name = scheduler_process(shm_pipe[1])
         os._exit(0)  # Exit scheduler process after sorting
 
     # Parent process (init)
@@ -106,7 +104,7 @@ if __name__ == "__main__":
     os.close(shm_pipe[1])
 
     # Run the parent process function, passing the read ends of the pipes and the shared memory pipe
-    shm_name = parent_process([pipes[i][0] for i in range(NUM_CHILDREN)], shm_pipe[0])
+    parent_process([pipes[i][0] for i in range(NUM_CHILDREN)], shm_pipe[0])
 
     # Wait for the scheduler to finish
     os.waitpid(scheduler_pid, 0)
